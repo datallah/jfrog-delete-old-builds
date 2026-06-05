@@ -314,7 +314,7 @@ main() {
     fi
     
     local builds
-    builds=$(get_builds "$BUILD_PATTERN")
+    builds=$(get_builds "$BUILD_PATTERN" | sort)
     
     if [[ -z "$builds" ]]; then
         log_warn "No builds found matching pattern: $BUILD_PATTERN"
