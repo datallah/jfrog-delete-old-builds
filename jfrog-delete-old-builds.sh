@@ -128,29 +128,50 @@ Examples:
 EOF
 }
 
-# Get list of builds from JFrog
+# Get list of builds from JFrog with pagination support
 get_builds() {
     local pattern=$1
-    local url="${JFROG_URL}/api/builds"
+    local base_url="${JFROG_URL}/api/builds"
+    local continue_state=""
+    local page_count=0
     
     log_info "Fetching builds from JFrog..."
     
-    response=$(curl -s -w "\n%{http_code}" -u "${JFROG_USERNAME}:${JFROG_API_KEY}" \
-        -H "Content-Type: application/json" \
-        "$url" 2>&1)
-    
-    local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | sed '$d')
-    
-    if [[ $http_code != "200" ]]; then
-        log_error "Failed to fetch builds (HTTP $http_code): $body"
-        return 1
-    fi
-    
-    log_debug "Builds API response: $body"
-    
-    # Parse JSON with jq - filter by pattern on buildName field
-    echo "$body" | jq -r '.data[] | select(.buildName | test("'"$pattern"'")) | .buildName' || true
+    while true; do
+        ((page_count++))
+        
+        local url="$base_url"
+        if [[ -n "$continue_state" ]]; then
+            url="${base_url}?continueState=$(echo -n "$continue_state" | jq -sRr @uri)"
+            log_debug "Fetching page $page_count with continueState: $continue_state"
+        else
+            log_debug "Fetching page $page_count"
+        fi
+        
+        response=$(curl -s -w "\n%{http_code}" -u "${JFROG_USERNAME}:${JFROG_API_KEY}" \
+            -H "Content-Type: application/json" \
+            "$url" 2>&1)
+        
+        local http_code=$(echo "$response" | tail -n1)
+        local body=$(echo "$response" | sed '$d')
+        
+        if [[ $http_code != "200" ]]; then
+            log_error "Failed to fetch builds (HTTP $http_code): $body"
+            return 1
+        fi
+        
+        log_debug "Builds API response (page $page_count): $body"
+        
+        # Parse JSON with jq - filter by pattern on buildName field
+        echo "$body" | jq -r '.data[] | select(.buildName | test("'"$pattern"'")) | .buildName' || true
+        
+        # Check if there are more pages
+        continue_state=$(echo "$body" | jq -r '.continueState // empty')
+        if [[ -z "$continue_state" ]]; then
+            log_info "Fetched $page_count page(s) of builds"
+            break
+        fi
+    done
 }
 
 # Get build numbers for a given build name
