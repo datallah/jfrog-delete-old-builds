@@ -163,7 +163,7 @@ get_builds() {
         log_debug "Builds API response (page $page_count): $body"
         
         # Parse JSON with jq - filter by pattern on buildName field
-        echo "$body" | jq -r '.data[] | select(.buildName | test("'"$pattern"'")) | .buildName' || true
+        echo "$body" | jq -r '.data[] | select(.buildName | test("'"$pattern"'")) | .buildName | @uri' || true
         
         # Check if there are more pages
         continue_state=$(echo "$body" | jq -r '.continueState // empty')
